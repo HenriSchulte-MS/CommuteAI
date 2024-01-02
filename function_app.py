@@ -20,11 +20,15 @@ def get_stop_id(name):
     return stop_id
 
 
-app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
+app = func.FunctionApp()
 
-@app.route(route="commute_alert")
-def commute_alert(req: func.HttpRequest) -> func.HttpResponse:
-    
+@app.timer_trigger(
+        schedule="0 0 6 * * 1-5",
+        arg_name="timer",
+        run_on_startup=False,
+        use_monitor=False)
+def commute_alert(timer: func.TimerRequest) -> None:
+    logging.info('Function triggered by timer.')
     logging.info('Loading environment variables...')
     origin_id = os.getenv('ORIGIN_ID')
     dest_id = os.getenv('DEST_ID')
@@ -169,5 +173,3 @@ def commute_alert(req: func.HttpRequest) -> func.HttpResponse:
 
             poller = email_client.begin_send(email)
             logging.info(f'Result: {poller.result()}. Terminating.')
-
-    return func.HttpResponse("Completed.")
