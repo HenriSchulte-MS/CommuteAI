@@ -2,6 +2,7 @@ import logging
 from dotenv import load_dotenv
 import os
 import requests
+import json
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 from azure.communication.email import EmailClient
@@ -53,7 +54,7 @@ if __name__ == '__main__':
     client = AzureOpenAI(
         azure_endpoint = aoai_uri, 
         api_key=aoai_key,  
-        api_version="2023-10-01-preview"
+        api_version="2023-12-01-preview"
     )
 
     logging.info('Getting Communication Services client...')
@@ -89,83 +90,71 @@ if __name__ == '__main__':
     logging.info(f'Found {len(messages)} messages.{" Terminating." if not len(messages) else ""}')
     if len(messages):
 
-        # Construct chat messages
-        joined_messages = '\n'.join(messages)
-        system_message = f'''You are CommuteAI, a helpful assistant that writes alerts for commuters. If the traffic
-                messages indicate an issue with the user\'s route, reply with a summary of the
-                relevant messages to send as an email alert. Start your message with "Hi {user_name}".
-                Follow these rules:
-                1. Only include alerts that are directly relevant to the user at their origin, destination,
-                or intermediary stops.
-                2. Only inform the user about changes that began in the past few days. Do not include alerts that
-                about changes that have been ongoing for longer. Today is {datetime.today().strftime("%A")}, {datetime.today().date()}.
-                3. Consider, why the alert is affecting the user\'s commute and to what effect.
-                4. Reply "N/A" if none of the alerts are immediately relevant.
-                
-                EXAMPLE 1:
-                I plan to go from Brown Street to Central Station. I usually use these lines: 1, 2, 4. I go via Madison Boulevard.
-                
-                MESSAGES:
-                Due to construction, the 1 will not stop at Brown Street. Use the 2 instead.
+        # First LLM task: Classification
+        joined_messages = '\n'.join(f'{i}: {message}' for i, message in enumerate(messages))
+        system_message = f'''
+                You are classifying public transport alerts based on their relevance to the
+                user's commute. Use the following rules to determine if an alert is relevant:
+                1. If the alert affects a stop that the user is using, it is relevant.
+                2. If the alert affects a stop that the user is using, but the user is not using the line that the alert is for, it is not relevant.
+                3. If the alert affects a stop that the user is not using, it is not relevant.
+                4. If the alert affects a line that the user is not using, it is not relevant.
+                5. If the alert affects a stop on the line that is neither origin nor destination but the user is going directly without transfers, it is not relevant.
+                6. If the alert is about a situation that began longer than a week ago, it is not relevant.
+                Consider the current date. Today is {datetime.today().strftime("%A")}, {datetime.today().date()}.
+                Respond as a list of JSON objects with properties: id (int), relevant (bool), reason (str).
 
-                ALERT:
-                Hi {user_name}, I found these alerts that may affect your commute:
-                Due to construction, the 1 will not stop at Brown Street. Use the 2 instead.
-
-                
-                EXAMPLE 2:
-                I plan to go from Brown Street to Central Station. I usually use these lines: 1, 2, 4. I go via Madison Boulevard.
-
-                MESSAGES:
-                Due to construction, the 3 will not stop at Brown Street.
-
-                ALERT:
-                N/A
-
-                
-                EXAMPLE 3:
-                I plan to go from Brown Street to Central Station. I usually use these lines: 1, 2, 4. I go via Madison Boulevard.
-
-                MESSAGES:
-                Due to construction, the 1 will not stop at Brown Street between November 2023 and March 2024.
-
-                ALERT:
-                N/A
-
-
-                EXAMPLE 4:
-                I plan to go from Brown Street to Central Station. I usually use these lines: 1, 2, 4. I go via Madison Boulevard.
-
-                MESSAGES:
-                Due to construction, the 1 will not stop at Lilly Street.
-
-                ALERT:
-                N/A
+                ALERTS:
+                {joined_messages}
                 '''
-        via_line = f' I plan to go via {via_names}.' if via_names else ''
-        user_message = f'''I am going from {origin_name} to {dest_name}.{via_line} I usually use these
-                lines: {lines}. 
-                \n\MESSAGES:
-                \n{joined_messages}'''
+        user_message = f'''
+                I am going from {origin_name} to {dest_name}. I am going
+                {('via' + via_names) if via_names else 'directly'}.
+                I am usually using these lines: {lines}.
+                '''
         response = client.chat.completions.create(
             model=aoai_deployment_name,
+            # response_format={ "type": "json_object" },
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": user_message}
             ],
             max_tokens=300
         )
-        alert = response.choices[0].message.content
-        logging.info(f'Summary: {alert}')
+        classified_messages = json.loads(response.choices[0].message.content)
+        logging.info(f'Classified messages: {classified_messages}')
 
-        if alert == 'N/A':
+        # Second LLM task: Summarize
+        relevant_messages = [messages[message['id']] for message in classified_messages if message['relevant']]
+        relevant_messages_joined = '\n'.join(relevant_messages)
+        if not len(relevant_messages):
             logging.info('No relevant issues found. Terminating.')
         else:
+            system_message = f'''
+                You are CommuteAI, a notification system that helps commuters get relevant alerts.
+                Your task is to summarize public transportation alerts for the user's commute.
+                Begin your summary with "Good morning, {user_name}".
+
+                Alerts:
+                {relevant_messages_joined}
+            '''
+
+            response = client.chat.completions.create(
+                model=aoai_deployment_name,
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_message}
+                ],
+                max_tokens=300
+            )
+            summary = response.choices[0].message.content
+            logging.info(f'Summary: {summary}')
+
             logging.info('Sending email...')
             email = {
                 "content": {
                     "subject": "Commute Alert for today",
-                    "plainText": alert
+                    "plainText": summary
                 },
                 "recipients": {
                     "to": [
