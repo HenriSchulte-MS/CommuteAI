@@ -1,17 +1,18 @@
 import logging
-from dotenv import load_dotenv
 import os
 import requests
 import json
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 from azure.communication.email import EmailClient
+import azure.functions as func
 from openai import AzureOpenAI
 from datetime import datetime
 
 
 def get_stop_id(name):
     logging.info(f'Getting stop id for {name}...')
+    journeyplanner_base_uri = os.getenv('JOURNEYPLANNER_BASE_URI')
     uri = f'{journeyplanner_base_uri}/location?input={name}&format=json'
     response = requests.get(uri)
     response_dict = response.json()
@@ -19,13 +20,12 @@ def get_stop_id(name):
     return stop_id
 
 
-if __name__ == '__main__':
+app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
-    # Configure logging to print to stdout
-    logging.basicConfig(level=logging.INFO)
-
+@app.route(route="commute_alert")
+def commute_alert(req: func.HttpRequest) -> func.HttpResponse:
+    
     logging.info('Loading environment variables...')
-    load_dotenv()
     origin_id = os.getenv('ORIGIN_ID')
     dest_id = os.getenv('DEST_ID')
     origin_name = os.getenv('ORIGIN_NAME')
@@ -169,3 +169,5 @@ if __name__ == '__main__':
 
             poller = email_client.begin_send(email)
             logging.info(f'Result: {poller.result()}. Terminating.')
+
+    return func.HttpResponse("Completed.")
