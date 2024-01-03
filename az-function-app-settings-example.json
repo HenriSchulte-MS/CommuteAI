@@ -1,0 +1,67 @@
+[
+    {
+      "name": "AOAI_DEPLOYMENT_NAME",
+      "value": "gpt-4",
+      "slotSetting": false
+    },
+    {
+      "name": "AOAI_KEY_NAME",
+      "value": "<name of your secret for the Azure OpenAI key in Azure Key Vault>",
+      "slotSetting": false
+    },
+    {
+      "name": "AOAI_URI",
+      "value": "https://<Azure OpenAI resource name>.openai.azure.com/",
+      "slotSetting": false
+    },
+    {
+      "name": "COMMS_CONN_STR_NAME",
+      "value": "<name of your secret for the Azure Communication Service connection string in Azure Key Vault>",
+      "slotSetting": false
+    },
+    {
+      "name": "DEST_NAME",
+      "value": "<name of your target destination, e.g., Lyngby St.>",
+      "slotSetting": false
+    },
+    {
+      "name": "JOURNEYPLANNER_BASE_URI",
+      "value": "<see Rejseplanen API documentation>",
+      "slotSetting": false
+    },
+    {
+      "name": "KEYVAULT_URI",
+      "value": "https://<your Key Vault resource name>.vault.azure.net/",
+      "slotSetting": false
+    },
+    {
+      "name": "LINES",
+      "value": "<comma-separated list of lines you are using, e.g., A, E, 250S>",
+      "slotSetting": false
+    },
+    {
+      "name": "ORIGIN_NAME",
+      "value": "<name of your target destination, e.g., København H>",
+      "slotSetting": false
+    },
+    {
+      "name": "SYSTEM_EMAIL",
+      "value": "<email you created in Azure Communication Service>",
+      "slotSetting": false
+    },
+    {
+      "name": "USER_EMAIL",
+      "value": "<your email>",
+      "slotSetting": false
+    },
+    {
+      "name": "USER_NAME",
+      "value": "<your name>",
+      "slotSetting": false
+    },
+    {
+      "name": "VIA_NAMES",
+      "value": "<comma-separated list of transfer stations, e.g., Nørreport St., Østerport St.>",
+      "slotSetting": false
+    }
+  ]
